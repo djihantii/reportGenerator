@@ -17,49 +17,82 @@ from lpod.frame import *
 from lpod.draw_page import *
 
 
-class Category():
-	def __init__(self):
+class Organizer():
+	def __init__(self , orderList):
 		pass
 	pass
 
-class Categoty_Client(Category):
-	def __init__(self , idClient , idContracts , period):
-		queries = InitQueries(3)
+class Category():
+	def __init__(self , markdownFile , clientId , contractList , period , conn):
+		self.markdownFile = markdownFile
+		self.clientId = clientId
+		self.contractList = contractList
+		self.period = period
+		self.conn = conn
 
-	
+class Category_Client(Category):
+	def __init__(self , markdownFile , clientId , contractList , period , conn):
+		Category.__init__(self , markdownFile , clientId , contractList , period , conn)
+
+	def initValues(self):
+		self.queries=InitQueriesContract(self.clientId , self.contractList)
+		self.queries.setQueries()
+		self.cursor=TaskExecutor(self.queries.listQueries  , self.conn)
+		self.cursor.executeTasks()
+		self.cursor.fetchValues()
+		self.values = self.cursor.fetchedValues
+
+
+	def fillSlide(self):
+		self.markdownFile.new_slide("**Le client :**"+str(self.values[0][0][0]))
+		# print self.values
+		self.markdownFile.writeText("* **Nom du client :** "+str(self.values[0][0][0]))
+		self.markdownFile.writeText("* **Client depuis :** "+str(self.values[0][1][0]))
+
+		for i in range(0 , len(self.contractList)):
+			self.markdownFile.new_slide("**Contrat :**"+ str(self.values[1][i][0]))
+			self.markdownFile.writeText("* **Nom du Contrat :** "+str(self.values[1][i][0]))
+			self.markdownFile.writeText("* **Description du contrat :** "+str(self.values[1][i][1]))
+			self.markdownFile.writeText("* **Debut du contrat :** "+str(self.values[1][i][2]))
+			self.markdownFile.writeText("* **Fin de contrat :** "+str(self.values[1][i][3]))
+			self.markdownFile.writeText("* **Logiciel :** "+str(self.values[1][i][4]))
+			self.markdownFile.writeText("* **Version :** "+str(self.values[1][i][5]))			
 
 class Category_Flow(Category):
-	def __init__(self):
-		pass
-	pass
+	def __init__(self , markdownFile , clientId , contractList , period):
+		Category.__init__(markdownFile , clientId , contractList , period)
 
 class Category_Division(Category):
-	def __init__(self):
-		pass
-	pass
+	def __init__(self , markdownFile , clientId , contractList , period):
+		Category.__init__(markdownFile , clientId , contractList , period)
 
 class Category_Resolution(Category):
-	def __init__(self):
-		pass
-	pass
+	def __init__(self , markdownFile , clientId , contractList , period):
+		Category.__init__(markdownFile , clientId , contractList , period)
 
 
 class Category_Evolution(Category):
-	def __init__(self):
-		pass
-	pass
+	def __init__(self , markdownFile , clientId , contractList , period):
+		Category.__init__(markdownFile , clientId , contractList , period)
 
 
 class Category_Demands(Category):
-	def __init__(self):
-		pass
-	pass
+	def __init__(self , markdownFile , clientId , contractList , period):
+		Category.__init__(markdownFile , clientId , contractList , period)
 
 
 class Category_Synthesis(Category):
-	def __init__(self):
-		pass
-	pass	
+	def __init__(self , markdownFile , clientId , contractList , period):
+		Category.__init__(markdownFile , clientId , contractList , period)	
+
+class Category_Evolution(Category):
+	def __init__(self , markdownFile , clientId , contractList , period):
+		Category.__init__(markdownFile , clientId , contractList , period)
+
+class Category_Clos_Open(Category):
+	def __init__(self , markdownFile , clientId , contractList , period):
+		Category.__init__(markdownFile , clientId , contractList , period)
+
 
 
 class InitQueries():
@@ -164,11 +197,13 @@ class InitQueriesSynthesis(InitQueries):
 		self.period= int(period)
 		self.static_query = " from statistic_ticket st inner join contract ct on ct.id = st.contract_id where st.close_date is not null and (st.fix_sla_target < st.fix_duration) and (select extract (year from (select age(current_date , ct.creation_date)))) = 0 and (select extract (month from (select age( current_date , ct.creation_date)))) = "
 
+
 	def setInformation_Queries(self):		
 		self.queriesInformation = []
 		for i in range(0, self.period):
-			self.queriesInformation[i].append([])
+			self.queriesInformation.append([])
 			for j in range(0 , len(self.contractList)):
+				self.queriesInformation[i].append([])
 				self.queriesInformation[i][j].append("select count(st.issue_type) "+self.static_query+str(i)+" and st.issue_type like '%information' and st.fix_in_progress = 't' and st.contract_id = "+str(self.contractList[j])+" ;")
 				self.queriesInformation[i][j].append("select count(st.issue_type) "+self.static_query+str(i)+" and st.issue_type like '%information' and st.waiting_for_customer = 't' and st.contract_id = "+str(self.contractList[j])+" ;")
 				self.queriesInformation[i][j].append("select count(st.issue_type) "+self.static_query+str(i)+" and st.issue_type like '%information' and  st.close_date is not null and st.contract_id = "+str(self.contractList[j])+" ;")
@@ -178,8 +213,9 @@ class InitQueriesSynthesis(InitQueries):
 	def set_Anom_Min_Queries(self):
 		self.queriesAnoMin = []
 		for i in range(0, self.period):
-			self.queriesAnoMin[i].append([])
+			self.queriesAnoMin.append([])
 			for j in range(0 , len(self.contractList)):
+				self.queriesAnoMin[i].append([])
 				self.queriesAnoMin[i][j].append("select count(st.issue_severity) "+self.static_query+str(i)+" and st.issue_severity like '%Mineure' and st.fix_in_progress = 't' and st.contract_id = "+str(self.contractList[j])+" ;")
 				self.queriesAnoMin[i][j].append("select count(st.issue_severity) "+self.static_query+str(i)+" and st.issue_severity like '%Mineure' and st.waiting_for_customer = 't' and st.contract_id = "+str(self.contractList[j])+" ;")
 				self.queriesAnoMin[i][j].append("select count(st.issue_severity) "+self.static_query+str(i)+" and st.issue_severity like '%Mineure' and  st.close_date is not null and st.contract_id = "+str(self.contractList[j])+" ;")
@@ -187,8 +223,9 @@ class InitQueriesSynthesis(InitQueries):
 	def setAnom_Maj_Queries(self):
 		self.queriesAnoMaj = []
 		for i in range(0, self.period):
-			self.queriesAnoMaj[i].append([])
+			self.queriesAnoMaj.append([])
 			for j in range(0 , len(self.contractList)):
+				self.queriesAnoMaj[i].append([])
 				self.queriesAnoMaj[i][j].append("select count(st.issue_severity) "+self.static_query+str(i)+" and st.issue_severity like '%Majeure' and st.fix_in_progress = 't' and st.contract_id = "+str(self.contractList[j])+" ;")
 				self.queriesAnoMaj[i][j].append("select count(st.issue_severity) "+self.static_query+str(i)+" and st.issue_severity like '%Majeure' and st.waiting_for_customer = 't' and st.contract_id = "+str(self.contractList[j])+" ;")
 				self.queriesAnoMaj[i][j].append("select count(st.issue_severity) "+self.static_query+str(i)+" and st.issue_severity like '%Majeure' and  st.close_date is not null and st.contract_id = "+str(self.contractList[j])+" ;")
@@ -197,8 +234,9 @@ class InitQueriesSynthesis(InitQueries):
 	def setBlock_Queries(self):
 		self.queriesBlock = []
 		for i in range(0, self.period):
-			self.queriesBlock[i].append([])
+			self.queriesBlock.append([])
 			for j in range(0 , len(self.contractList)):
+				self.queriesBlock[i].append([])
 				self.queriesBlock[i][j].append("select count(st.issue_severity) "+self.static_query+str(i)+" and (st.issue_severity ='Bloquante' or st.issue_severity='3 anomalie bloquante') and st.fix_in_progress = 't' and st.contract_id = "+str(self.contractList[j])+" ;")
 				self.queriesBlock[i][j].append("select count(st.issue_severity) "+self.static_query+str(i)+" and (st.issue_severity ='Bloquante' or st.issue_severity='3 anomalie bloquante') and st.waiting_for_customer = 't' and st.contract_id = "+str(self.contractList[j])+" ;")
 				self.queriesBlock[i][j].append("select count(st.issue_severity) "+self.static_query+str(i)+" and (st.issue_severity ='Bloquante' or st.issue_severity='3 anomalie bloquante') and  st.close_date is not null and st.contract_id = "+str(self.contractList[j])+" ;")
@@ -209,8 +247,9 @@ class InitQueriesSynthesis(InitQueries):
 		self.static_other_query = "select count(issue_type) from statistic_ticket where (select extract (year from (select age(current_date , creation_date)))) = 0 and (select extract (month from (select age( current_date , creation_date)))) ="
 		self.static_condition ="  and issue_type not like '%anomalie%' and issue_type not like '%Anomalie%' and issue_type not like '%information%' ;"
 		for i in range(0, self.period):
-			self.queriesBlock[i].append([])
+			self.queriesBlock.append([])
 			for j in range(0 , len(self.contractList)):
+				self.queriesBlock[i].append([])
 				self.queriesOthers[i][j].append(self.static_other_query+str(i)+" and st.fix_in_progress = 't' and st.contract_id = "+str(self.contractList[j])+self.static_condition)
 				self.queriesOthers[i][j].append(self.static_other_query+str(i)+" and st.waiting_for_customer = 't' and st.contract_id = "+str(self.contractList[j])+self.static_condition)
 				self.queriesOthers[i][j].append(self.static_other_query+str(i)+" and st.close_date is not null and st.contract_id = "+str(self.contractList[j])+self.static_condition)
@@ -244,6 +283,23 @@ class TaskExecutor():
 					self.resultTable[i][j][k].execute(self.queries[i][j][k])
 
 
+	def fetchValues(self):
+		self.fetchedValues = []
+		for i in range(0 , len(self.resultTable)):
+			self.fetchedValues.append([])
+			for j in range(0 , len(self.resultTable[i])):
+				self.fetchedValues[i].append([])
+				for k in range(0 , len(self.resultTable[i][j])):
+					# print "jexecute le fetchvalues"
+					try:
+
+						self.fetchedValues[i][j].append(self.resultTable[i][j][k].fetchone()[0])
+						print self.fetchedValues[i][j][k]
+					except TypeError:
+						self.fetchedValues[i][j].append( "Champ mal rempli")
+						print self.fetchedValues[i][j][k]
+						logging.error("Query "+self.queries[i][j][k]+" failed !")
+
 class PieChartsGenerator():
 	def __init__(self ,title ,titles,  values ):
 		self.titles = titles
@@ -261,7 +317,7 @@ class PieChartsGenerator():
 
 	def savePieChart(self):
 		plt.savefig(str(self.title)+"resolution.svg")
-		plt.show()
+
 
 
 class HistogramGenerator():
@@ -302,9 +358,14 @@ class ExterneTablesGenerator():
 		self.titlesRow = titlesRow
 		self.titlesColumn = titlesColumn
 		self.values = values
-		self.doc = odf_get_document(str(path))
-		self.context = self.doc.get_body()
 		self.id = str(id)
+		self.path = path
+	def recoverTemplate(self):	
+		try:
+			self.doc = odf_get_document(str(self.path))
+			self.context = self.doc.get_body()
+		except:
+			logging.error("can't recover or open template "+str(self.path))
 
 	def createPage(self):
 		self.page = odf_create_draw_page(page_id = "p"+self.id , name="page"+str(id))
@@ -349,11 +410,15 @@ class LineChartGenerator():
 		plt.xlabel(self.xLabel)
 		plt.ylabel(self.yLabel)
 	def saveLineChart(self):
-		plt.show()
+		plt.savefig(title+".svg")
 
 class markdownGenerator():
 	def __init__(self , file):
-		self.file = open(str(file)+".md" , "w")
+		try:
+			self.file = open(str(file)+".md" , "w")		
+		except:
+			logging.error("Can't open file "+str(file)+".md")
+	
 	def new_slide(self , title):
 		self.file.write("## "+title)
 		self.end_line()
@@ -379,13 +444,62 @@ class ConnectionDB():
 	def connection(self):
 		try:
 			conn_string = " host=" + self.host+ " dbname="+self.database+" user="+self.user+" password="+self.password+" "
-			logging.info("Connecting to database \n ->%s" %(conn_string))
+			logging.info("Connecting to database succeeded")
 			self.conn = psycopg2.connect(conn_string)
 		except (Exception, psycopg2.DatabaseError) as error:
 			logging.debug('Connection to database failed !')
 
-	
+
+def testExternal():
+	test = ExterneTablesGenerator("test" , ["a" , "b"] , ["c" , "d"] , [["1" , "2"] , ["3" , "4"]] , "tmplt.odp" , "oiazy")	
+	test.recoverTemplate()
+	test.createPage()
+	test.create_table()
+	test.fill_cells()
+	test.merge()
+	test.savePresentation()	
+
 
 if __name__ == "__main__":
 	logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s' , datefmt='%m-%d %H:%M', filename='reporting.log', filemode='w')
 	conn = ConnectionDB("tosca2dev", "tosca2dev" , "tosca2dev" , "tosca2.linagora.dc1")
+	conn.connection()
+
+	file = markdownGenerator("filetest")
+	
+
+	test = Category_Client(file , "1836" , ["12485" , "2104" , "77666" , "12491"] , 3 , conn.conn)
+	test.initValues()
+	test.fillSlide()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

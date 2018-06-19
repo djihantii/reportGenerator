@@ -1,0 +1,9 @@
+06-19 18:00 root         INFO     Connecting to database succeeded
+06-19 18:00 root         ERROR    Query SELECT sf.name FROM software sf INNER JOIN contract_software_version csv ON csv.software_id = sf.id where csv.contract_id = 12485 limit 22; failed !
+06-19 18:00 root         ERROR    Query SELECT sv.name from software_version sv inner join contract_software_version csv on csv.software_id = sv.software_id and csv.contract_id = 12485 limit 22; failed !
+06-19 18:00 root         ERROR    Query SELECT sf.name FROM software sf INNER JOIN contract_software_version csv ON csv.software_id = sf.id where csv.contract_id = 2104 limit 22; failed !
+06-19 18:00 root         ERROR    Query SELECT sv.name from software_version sv inner join contract_software_version csv on csv.software_id = sv.software_id and csv.contract_id = 2104 limit 22; failed !
+06-19 18:00 root         ERROR    Query SELECT sf.name FROM software sf INNER JOIN contract_software_version csv ON csv.software_id = sf.id where csv.contract_id = 77666 limit 22; failed !
+06-19 18:00 root         ERROR    Query SELECT sv.name from software_version sv inner join contract_software_version csv on csv.software_id = sv.software_id and csv.contract_id = 77666 limit 22; failed !
+06-19 18:00 root         ERROR    Query SELECT sf.name FROM software sf INNER JOIN contract_software_version csv ON csv.software_id = sf.id where csv.contract_id = 12491 limit 22; failed !
+06-19 18:00 root         ERROR    Query SELECT sv.name from software_version sv inner join contract_software_version csv on csv.software_id = sv.software_id and csv.contract_id = 12491 limit 22; failed !
