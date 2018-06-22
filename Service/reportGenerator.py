@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 import plotly.plotly as py
 from collections import Counter
 import unicodedata
-# from tableRenderer import *
 import logging
 from lpod.document import *
 from lpod.element import *
@@ -15,24 +14,46 @@ from lpod.style import *
 from lpod.table import *
 from lpod.frame import *
 from lpod.draw_page import *
+import yaml
+#####to move to config file#####
+month_dict = {
+	1 : "Janvier",
+	2 : "Fevrier",
+	3 : "Mars",
+	4 : "Avril",
+	5 : "Mai",
+	6 : "Juin",
+	7 : "Juillet",
+	8 : "Aout",
+	9 : "Septembre",
+	10 : "Octobre",
+	11 : "Novembre",
+	12 : "Decembre"
+	
+}
+##########
 
+class Organizer():
+	def __init__(self , preferences):
+		pass
+	pass
+##########
 
 class Organizer():
 	def __init__(self , orderList):
 		pass
-	pass
 
 class Category():
-	def __init__(self , markdownFile , clientId , contractList , period , conn):
+	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
 		self.markdownFile = markdownFile
 		self.clientId = clientId
 		self.contractList = contractList
 		self.period = period
 		self.conn = conn
-
+		self.data_conf = data_conf
 class Category_Client(Category):
-	def __init__(self , markdownFile , clientId , contractList , period , conn):
-		Category.__init__(self , markdownFile , clientId , contractList , period , conn)
+	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
+		Category.__init__(self , markdownFile , clientId , contractList , period , conn , data_conf)
 
 	def initValues(self):
 		self.queries=InitQueriesContract(self.clientId , self.contractList)
@@ -59,39 +80,238 @@ class Category_Client(Category):
 			self.markdownFile.writeText("* **Version :** "+str(self.values[1][i][5]))			
 
 class Category_Flow(Category):
-	def __init__(self , markdownFile , clientId , contractList , period):
-		Category.__init__(markdownFile , clientId , contractList , period)
+	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
+		Category.__init__(self , markdownFile , clientId , contractList , period , conn , data_conf)
+
+	def initValues(self):
+		self.queries=InitQueriesFlow(self.clientId , self.contractList , self.period)
+		self.queries.setQueries()
+		self.cursor=TaskExecutor(self.queries.listQueries  , self.conn)
+		self.cursor.executeTasks()
+		self.cursor.fetchValues()
+		self.values = self.cursor.fetchedValues
+
+	def getSum(self , contrat , indice):
+		result = 0
+		for i in range(0 , len(contrat)):
+			result = result + int(contrat[i][indice])
+		# print result
+		return result
+	#Count the sum of distinct issues type per contract for each month
+	def setValues(self):
+		self.totalValues = []
+		for i in range(0 , self.period):
+			self.totalValues.append([])
+			for j in range(0 , len(self.values[i][0])-1):
+				self.totalValues[i].append([])
+				# print self.getSum(self.values[i] , j)
+				self.totalValues[i][j]= self.getSum(self.values[i] , j)
+
+	def recoverMonths(self):
+		listMonths = []
+		for i in range(0 , len(self.values)):
+			for j in range(0 , len(self.values[i])-1):
+				listMonths.append(month_dict[int(self.values[i][j][4])])
+
+		return listMonths
+
+	def drawTable(self):
+		self.table = ExterneTablesGenerator("tableFlow"  ,["information", "support" , "autre" , "total"],  self.recoverMonths() , self.totalValues ,"tmplt.odp" , "testTable")	
+		self.table.recoverTemplate()
+		self.table.createPage()
+		self.table.create_table()
+		# print len(self.table.titlesRow)
+		# print len(self.table.titlesColumn)
+		self.table.fill_cells()
+		self.table.merge()
+		self.table.savePresentation()
+
 
 class Category_Division(Category):
-	def __init__(self , markdownFile , clientId , contractList , period):
-		Category.__init__(markdownFile , clientId , contractList , period)
+	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
+		Category.__init__(self , markdownFile , clientId , contractList , period , conn , data_conf)
+
+	def initValues(self):
+		self.queries=InitQueriesDivision(self.clientId , self.contractList , self.period)
+		self.queries.setQueries()
+		self.cursor=TaskExecutor(self.queries.listQueries  , self.conn)
+		self.cursor.executeTasks()
+		self.cursor.fetchValues()
+		self.values = self.cursor.fetchedValues
+
+	def getSum(self , contrat , indice):
+		result = 0
+		for i in range(0 , len(contrat)):
+			result = result + int(contrat[i][indice])
+		# print result
+		return result
+	#Count the sum of distinct issues type per contract for each month
+	def setValues(self):
+		self.totalSeverities = [0 , 0, 0, 0 ]
+		self.totalValues = []
+		for i in range(0 , self.period):
+			self.totalValues.append([])
+			for j in range(0 , len(self.values[i][0])-1):
+				self.totalValues[i].append([])
+				# print self.getSum(self.values[i] , j)
+				self.totalValues[i][j]= self.getSum(self.values[i] , j)
+
+		for i in range(0 , len(self.totalValues)):
+			for j in range(0 , len(self.totalValues[i])-1):
+				self.totalSeverities[j]=self.totalSeverities[j]+self.totalValues[i][j]
+	def recoverMonths(self):
+		listMonths = []
+		for i in range(0 , len(self.values)):
+			for j in range(0 , len(self.values[i])-2):
+				listMonths.append(month_dict[int(self.values[i][j][5])])
+
+		return listMonths
+
+	def drawTable(self):
+		self.table = ExterneTablesGenerator("table Division"  ,["Mineure", "Majeure" , "Bloquante" , "autre","total"],  self.recoverMonths() , self.totalValues ,"../templates/tmplt.odp" , "testTable" , self.data_conf)	
+		self.table.recoverTemplate()
+		self.table.createPage()
+		self.table.create_table()
+		# print len(self.table.titlesRow)
+		# print len(self.table.titlesColumn)
+		self.table.fill_cells()
+		self.table.merge()
+		self.table.savePresentation()
+
+	def drawHistogram(self):
+		histogram = HistogramGenerator("Repartition" , self.totalSeverities , ["Mineure" , "Majeure" , "Bloquante " , "Autres"])
+		histogram.setTitles()
+		histogram.create_histogram()
+		histogram.saveFigure()
+
+
 
 class Category_Resolution(Category):
-	def __init__(self , markdownFile , clientId , contractList , period):
-		Category.__init__(markdownFile , clientId , contractList , period)
+	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
+		Category.__init__(self , markdownFile , clientId , contractList , period , conn , data_conf)
+
+	def setValues(self):
+		self.negativeQueries=InitQueriesNegativeResolution(self.clientId , self.contractList , self.period)
+		self.negativeQueries.setQueries()
+		self.cursor=TaskExecutor(self.negativeQueries.listQueries  , self.conn)
+		self.cursor.executeTasks()
+		self.cursor.fetchValues()
+		self.negativeValues = self.cursor.fetchedValues
+
+		self.positiveQueries=InitQueriesPositiveResolution(self.clientId , self.contractList , self.period)
+		self.positiveQueries.setQueries()
+		self.cursor=TaskExecutor(self.positiveQueries.listQueries  , self.conn)
+		self.cursor.executeTasks()
+		self.cursor.fetchValues()
+		self.positiveValues = self.cursor.fetchedValues
+ 	
+ 	def setPercentageResolutions(self):
+ 		self.percentages = [0 , 0 , 0 ,0]
+ 		for i in range(0 , len(self.percentages)):
+ 			self.percentages[i]=self.totalPositiveValues[i]*100/(self.totalPositiveValues[i]+self.totalNegativeValues[i])
+
+ 	def setSumtickets(self):
+ 		self.totalPositiveValues = [0 , 0 , 0 , 0]
+ 		self.totalNegativeValues = [0 , 0 , 0 , 0]
+ 		self.totalValues = [0 , 0 , 0 , 0]
+ 		for i in range(0, self.period):
+ 			for j in range(0 , len(self.contractList)):
+ 				for k in range(0 , len(self.totalPositiveValues)):
+ 					self.totalPositiveValues[k]=self.totalPositiveValues[k]+int(self.negativeValues[i][j][k])
+ 					self.totalNegativeValues[k]=self.totalNegativeValues[k]+int(self.positiveValues[i][j][k])
+ 					self.totalValues[k] = self.totalValues[k]+int(self.negativeValues[i][j][k])+int(self.positiveValues[i][j][k])
+ 	def drawTable(self):
+ 		self.valuesTable =[[] , []]
+ 		for i in range(0 , 4):
+ 			self.valuesTable[0].append(str(self.totalValues[i]))
+
+ 		for i in range(0 , 4):
+ 			self.valuesTable[1].append(str(self.percentages[i])+"%")
+ 		
+ 		
+ 		self.table = ExterneTablesGenerator("Resolutions"  ,["Information" , "Anomalie Mineure" , "Anomalie Majeure" , "Anomalie Bloquante"],  ["Nombre de tickets" , "Delai respectes"] , self.valuesTable ,"../templates/tmplt.odp" , "tableResolution" , self.data_conf)	
+		self.table.recoverTemplate()
+		self.table.createPage()
+		self.table.create_table()
+		
+		self.table.fill_cells()
+		self.table.merge()
+		self.table.savePresentation()
+
+	def drawPieCharts(self):
+		anomalieTotalValue =[0 , 0]
+		for i in range(1 , 4):
+		  	anomalieTotalValue[0] = anomalieTotalValue[0]+self.totalPositiveValues[i]
+		  	anomalieTotalValue[1] = anomalieTotalValue[1]+self.totalNegativeValues[i]  
+		
+
+		pieInformation = PieChartsGenerator("Informations" , ["Delai respecte" , "Delai non respecte"] , [int(self.totalPositiveValues[0]) ,int(self.totalNegativeValues[0]) ])
+		pieInformation.createPieCharte()
+		pieInformation.savePieChart()
+
+		pieAnomalie = PieChartsGenerator("Anomalie" , ["Delai respecte" , "Delai non respecte"] , anomalieTotalValue)
+		pieAnomalie.createPieCharte()
+		pieAnomalie.savePieChart()
+
+class Category_Synthesis(Category):
+	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
+		Category.__init__(self , markdownFile , clientId , contractList , period , conn , data_conf)	
+
+	def setValues(self):
+		self.queries = InitQueriesSynthesis(self.clientId , self.contractList , self.period)
+		self.queries.setInformation_Queries()
+		self.queries.set_Anom_Min_Queries()
+		self.queries.setAnom_Maj_Queries()
+		self.queries.setBlock_Queries()
+		self.queries.setOther_Queries()
+
+		self.cursor=TaskExecutor(self.queries.queriesInformation  , self.conn)
+		self.cursor.executeTasks()
+		self.cursor.fetchValues()
+		self.informationValues = self.cursor.fetchedValues
+
+
+		self.cursor=TaskExecutor(self.queries.queriesAnoMin  , self.conn)
+		self.cursor.executeTasks()
+		self.cursor.fetchValues()
+		self.anomMinValues = self.cursor.fetchedValues
+
+		self.cursor=TaskExecutor(self.queries.queriesAnoMaj  , self.conn)
+		self.cursor.executeTasks()
+		self.cursor.fetchValues()
+		self.anomMajValues = self.cursor.fetchedValues
+
+		self.cursor=TaskExecutor(self.queries.queriesBlock  , self.conn)
+		self.cursor.executeTasks()
+		self.cursor.fetchValues()
+		self.anomBloq = self.cursor.fetchedValues
+
+		self.cursor=TaskExecutor(self.queries.queriesOthers  , self.conn)
+		self.cursor.executeTasks()
+		self.cursor.fetchValues()
+		self.otherValues = self.cursor.fetchedValues
+
+
 
 
 class Category_Evolution(Category):
-	def __init__(self , markdownFile , clientId , contractList , period):
-		Category.__init__(markdownFile , clientId , contractList , period)
+	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
+		Category.__init__(self , markdownFile , clientId , contractList , period , conn , data_conf)
+
 
 
 class Category_Demands(Category):
-	def __init__(self , markdownFile , clientId , contractList , period):
-		Category.__init__(markdownFile , clientId , contractList , period)
+	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
+		Category.__init__(self , markdownFile , clientId , contractList , period , conn , data_conf)
 
-
-class Category_Synthesis(Category):
-	def __init__(self , markdownFile , clientId , contractList , period):
-		Category.__init__(markdownFile , clientId , contractList , period)	
 
 class Category_Evolution(Category):
-	def __init__(self , markdownFile , clientId , contractList , period):
-		Category.__init__(markdownFile , clientId , contractList , period)
+	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
+		Category.__init__(self , markdownFile , clientId , contractList , period , conn , data_conf)
 
 class Category_Clos_Open(Category):
-	def __init__(self , markdownFile , clientId , contractList , period):
-		Category.__init__(markdownFile , clientId , contractList , period)
+	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
+		Category.__init__(self , markdownFile , clientId , contractList , period , conn , data_conf)
 
 
 
@@ -139,6 +359,7 @@ class InitQueriesFlow(InitQueries):
 				self.listQueries[i][j].append(self.static_query+str(i)+" and contract_id = "+str(self.contractList[j])+" and issue_type like '%information%' ;")				
 				self.listQueries[i][j].append(self.static_query+str(i)+" and contract_id = "+str(self.contractList[j])+" and (issue_type like '%anomalie%' or issue_type like '%Anomalie%') ;")
 				self.listQueries[i][j].append(self.static_query+str(i)+" and contract_id = "+str(self.contractList[j])+" and issue_type not like '%anomalie%' and issue_type not like '%Anomalie%' and issue_type not like '%information%' ;")
+				self.listQueries[i][j].append(self.static_query+str(i)+" and contract_id = "+str(self.contractList[j])+"  ;")
 				self.listQueries[i][j].append("select extract(month from (select current_date - interval '"+str(i)+" month')) ;")	
 
 
@@ -156,6 +377,9 @@ class InitQueriesDivision(InitQueries):
 				self.listQueries[i][j].append(self.static_query+str(i)+" and contract_id = "+str(self.contractList[j])+" and issue_severity like '%Mineure%' ;")
 				self.listQueries[i][j].append(self.static_query+str(i)+" and contract_id = "+str(self.contractList[j])+" and issue_severity like '%Majeure%' ;")
 				self.listQueries[i][j].append(self.static_query+str(i)+" and contract_id = "+str(self.contractList[j])+" and (issue_severity ='Bloquante' or issue_severity='3 anomalie bloquante') ;")
+				self.listQueries[i][j].append(self.static_query+str(i)+" and contract_id = "+str(self.contractList[j])+" and issue_severity !='Bloquante' and issue_severity !='3 anomalie bloquante' and issue_severity not like '%Majeure%' and issue_severity not like '%Mineure%' ;")
+				self.listQueries[i][j].append(self.static_query+str(i)+" and contract_id = "+str(self.contractList[j])+" and (issue_severity ='Bloquante' or issue_severity='3 anomalie bloquante' or issue_severity like '%Majeure%' or issue_severity like '%Mineure%') ;")
+				self.listQueries[i][j].append("select extract(month from (select current_date - interval '"+str(i)+" month')) ;")	
 
 
 class InitQueriesNegativeResolution(InitQueries):
@@ -183,12 +407,13 @@ class InitQueriesPositiveResolution(InitQueries):
 	
 	def setQueries(self):
 		for i in range(0 , self.period):
-			self.listQueries[i].append([])
+			self.listQueries.append([])
 			for j in range(0 , len(self.contractList)):
+				self.listQueries[i].append([])
 				self.listQueries[i][j].append("select count(st.issue_type) "+self.static_query+str(i)+" and st.issue_type like '%information' and st.contract_id = "+str(self.contractList[j])+" ;")
 				self.listQueries[i][j].append("select count(st.issue_severity) "+self.static_query+str(i)+" and st.issue_severity like '%Mineure' and st.contract_id = "+str(self.contractList[j])+" ;")
 				self.listQueries[i][j].append("select count(st.issue_severity) "+self.static_query+str(i)+" and st.issue_severity like '%Majeure' and st.contract_id = "+str(self.contractList[j])+" ;")
-				self.listQueries[i][j].append("select count(st.issue_severity) "+self.static_query+str(i)+" and (st.issue_severity ='Bloquante' or st.issue_severity='3 anomalie bloquante')  "+str(self.contractList[j])+" ;")
+				self.listQueries[i][j].append("select count(st.issue_severity) "+self.static_query+str(i)+" and (st.issue_severity ='Bloquante' or st.issue_severity='3 anomalie bloquante')  and contract_id = "+str(self.contractList[j])+" ;")
 
 
 class InitQueriesSynthesis(InitQueries):
@@ -247,13 +472,13 @@ class InitQueriesSynthesis(InitQueries):
 		self.static_other_query = "select count(issue_type) from statistic_ticket where (select extract (year from (select age(current_date , creation_date)))) = 0 and (select extract (month from (select age( current_date , creation_date)))) ="
 		self.static_condition ="  and issue_type not like '%anomalie%' and issue_type not like '%Anomalie%' and issue_type not like '%information%' ;"
 		for i in range(0, self.period):
-			self.queriesBlock.append([])
+			self.queriesOthers.append([])
 			for j in range(0 , len(self.contractList)):
-				self.queriesBlock[i].append([])
-				self.queriesOthers[i][j].append(self.static_other_query+str(i)+" and st.fix_in_progress = 't' and st.contract_id = "+str(self.contractList[j])+self.static_condition)
-				self.queriesOthers[i][j].append(self.static_other_query+str(i)+" and st.waiting_for_customer = 't' and st.contract_id = "+str(self.contractList[j])+self.static_condition)
-				self.queriesOthers[i][j].append(self.static_other_query+str(i)+" and st.close_date is not null and st.contract_id = "+str(self.contractList[j])+self.static_condition)
-				self.queriesOthers[i][j].append(self.static_other_query+str(i)+" and (st.fix_in_progress = 't' or st.waiting_for_customer = 't' or st.close_date is not null) and st.contract_id = "+str(self.contractList[j])+self.static_condition)
+				self.queriesOthers[i].append([])
+				self.queriesOthers[i][j].append(self.static_other_query+str(i)+" and fix_in_progress = 't' and contract_id = "+str(self.contractList[j])+self.static_condition)
+				self.queriesOthers[i][j].append(self.static_other_query+str(i)+" and waiting_for_customer = 't' and contract_id = "+str(self.contractList[j])+self.static_condition)
+				self.queriesOthers[i][j].append(self.static_other_query+str(i)+" and close_date is not null and contract_id = "+str(self.contractList[j])+self.static_condition)
+				self.queriesOthers[i][j].append(self.static_other_query+str(i)+" and (fix_in_progress = 't' or waiting_for_customer = 't' or close_date is not null) and contract_id = "+str(self.contractList[j])+self.static_condition)
 
 
 
@@ -294,10 +519,10 @@ class TaskExecutor():
 					try:
 
 						self.fetchedValues[i][j].append(self.resultTable[i][j][k].fetchone()[0])
-						print self.fetchedValues[i][j][k]
+						# print self.fetchedValues[i][j][k]
 					except TypeError:
 						self.fetchedValues[i][j].append( "Champ mal rempli")
-						print self.fetchedValues[i][j][k]
+						# print self.fetchedValues[i][j][k]
 						logging.error("Query "+self.queries[i][j][k]+" failed !")
 
 class PieChartsGenerator():
@@ -321,17 +546,22 @@ class PieChartsGenerator():
 
 
 class HistogramGenerator():
-	def __init__(self ,title , values ):
+	def __init__(self ,title , values , titles ):
 		self.title = title
 		self.values = values
 		self.ticket_dict = {}
-		
+		self.titles = titles
+
+
 	def setTitles(self):
-		self.ticket_dict["Information"] = self.values[0]
-		self.ticket_dict["Mineure"]=self.values[1]
-		self.ticket_dict["Majeure"]=self.values[2]
-		self.ticket_dict["Bloquante"]=self.values[3]
-		self.ticket_dict["Autre"]=self.values[4]
+		for i in range(0 , len(self.titles)):
+			self.ticket_dict[self.titles[i]]=self.values[i]
+		# self.ticket_dict["Information"] = self.values[0]
+		# self.ticket_dict["Mineure"]=self.values[1]
+		# self.ticket_dict["Majeure"]=self.values[2]
+		# self.ticket_dict["Bloquante"]=self.values[3]
+		# self.ticket_dict["Autre"]=self.values[4]
+		print self.ticket_dict
 
 	def create_histogram(self):
 		figure = plt.figure()
@@ -352,7 +582,7 @@ class HistogramGenerator():
 
 
 class ExterneTablesGenerator():
-	def __init__(self  , title , titlesRow , titlesColumn , values , path , id):
+	def __init__(self  , title , titlesRow , titlesColumn , values , path , id , data_conf):
 		self.title = title
 		self.values = values
 		self.titlesRow = titlesRow
@@ -360,12 +590,13 @@ class ExterneTablesGenerator():
 		self.values = values
 		self.id = str(id)
 		self.path = path
+		self.data_conf = data_conf
 	def recoverTemplate(self):	
 		try:
-			self.doc = odf_get_document(str(self.path))
+			self.doc = odf_get_document(str(self.data_conf['conversion']['template']))
 			self.context = self.doc.get_body()
 		except:
-			logging.error("can't recover or open template "+str(self.path))
+			logging.error("can't recover or open the template "+str(self.path))
 
 	def createPage(self):
 		self.page = odf_create_draw_page(page_id = "p"+self.id , name="page"+str(id))
@@ -377,6 +608,7 @@ class ExterneTablesGenerator():
 		self.tab.set_value((i , j) , str(value))
 
 	def fill_cells(self):
+		
 		#fill row titles
 		for i in range(1 , len(self.titlesColumn)+1):
 			self.set_val(i , 0 , self.titlesColumn[i-1])
@@ -389,14 +621,16 @@ class ExterneTablesGenerator():
 				self.set_val(i , j , self.values[i-1][j-1])
 	
 	def merge(self):
+		
 		self.frame = odf_create_frame(name = u"frame"+str(id) , size=('22cm' , '7.2cm') , position = ('2.3cm' , '4.5cm'))
 		self.frame.append(self.tab)
 		self.page.append(self.frame)
 		self.context.insert(self.page , 1)
 	
 	def savePresentation(self):
+		
 		self.doc.save(target=str(self.id)+"report.odp" , pretty="false")
-
+		self.data_conf['conversion']['template']=str(self.id)+"report.odp"
 class LineChartGenerator():
 	def __init__(self , title ,xLabel , yLabel, values):
 		self.title = title
@@ -415,7 +649,8 @@ class LineChartGenerator():
 class markdownGenerator():
 	def __init__(self , file):
 		try:
-			self.file = open(str(file)+".md" , "w")		
+			self.file = open(str(file)+".md" , "w")	
+			self.title = str(file)+".md"	
 		except:
 			logging.error("Can't open file "+str(file)+".md")
 	
@@ -435,11 +670,11 @@ class markdownGenerator():
 		self.end_line()
 
 class ConnectionDB():
-	def __init__(self , user , password , database , host):
-		self.user = user
-		self.password = password
-		self.database = database
-		self.host = host
+	def __init__(self , dict_values):
+		self.user = dict_values['user']
+		self.password = dict_values['password']
+		self.database = dict_values['database']
+		self.host = dict_values['host']
 
 	def connection(self):
 		try:
@@ -448,6 +683,22 @@ class ConnectionDB():
 			self.conn = psycopg2.connect(conn_string)
 		except (Exception, psycopg2.DatabaseError) as error:
 			logging.debug('Connection to database failed !')
+
+class Converter():
+	def __init__(self , markdownFile , template , title , data_conf):
+		self.markdownFile = markdownFile
+		self.template = template
+		# self.arguments = arguments
+		self.data_conf = data_conf
+		self.title = title
+		self.converter = data_conf['conversion']['converter']
+	def convert(self):
+		self.markdownFile.file.close()
+		# print self.converter+" "+self.markdownFile.title+" "+self.template+" "+self.title+".odp"
+		
+		os.system("odpdown "+self.markdownFile.title+" "+self.data_conf['conversion']['template']+" "+self.title+".odp")
+		self.data_conf['conversion']['template']=str(self.title+".odp")
+	
 
 
 def testExternal():
@@ -459,38 +710,64 @@ def testExternal():
 	test.merge()
 	test.savePresentation()	
 
+def testTotalSum(contrat , indice):
+	result = 0
+	for i in range(0 , len(contrat)):
+		result = result + contrat[i][indice]
+	return result
+
 
 if __name__ == "__main__":
-	logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s' , datefmt='%m-%d %H:%M', filename='reporting.log', filemode='w')
-	conn = ConnectionDB("tosca2dev", "tosca2dev" , "tosca2dev" , "tosca2.linagora.dc1")
-	conn.connection()
 
 	file = markdownGenerator("filetest")
 	
+	for arg in sys.argv:
+		print arg 
 
-	test = Category_Client(file , "1836" , ["12485" , "2104" , "77666" , "12491"] , 3 , conn.conn)
+	# test = Category_Flow(file , "1836" , ["12485"  , "12491"] , 1 , conn.conn)
+	# test.initValues()
+
+	# test.setValues()
+	# print test.values
+	# # testArray = [  [[1 , 1 , 1],[2 , 2 , 2],[3 , 3 , 3]] ,[[4 , 4 , 4],[5 , 5 , 5],[6 , 6 , 6]],[[7 , 7 , 7],[8 , 8 , 8],[9 , 9, 9]],[[10 , 10 , 10],[11 , 11 , 11],[12 , 12 , 12]] ]
+	# # print test.totalValues
+	# print test.recoverMonths()
+	# test.drawTable()
+	# # print test.queries.listQueries[0][0][3]
+
+
+
+	with open("../reportConfig/report.conf" , "rwsubl") as stream:
+		data_loaded = yaml.load(stream)
+		data = yaml.dump(data_loaded)
+
+	logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s' , datefmt='%m-%d %H:%M', filename='reporting.log', filemode='w')
+	conn = ConnectionDB(data_loaded['connection'])
+	conn.connection()
+
+	# test = Category_Division(file , "1836" , ["12485"  , "12491"] , 1 , conn.conn , data_loaded)
+	# test.initValues()
+	# test.setValues()
+	# test.drawTable()
+
+	print data_loaded['conversion']
+	
+	test = Category_Client(file , "1836" , ["12485" , "2104" , "77666" , "12491"] , 3 , conn.conn , data_loaded)
 	test.initValues()
 	test.fillSlide()
+	convert = Converter(file , "../templates/tmplt.odp" , "testing" , data_loaded)
+	convert.convert()	
+
+	print data_loaded['conversion']
 
 
+	test = Category_Resolution(file , "1836" , ["12485"  , "12491"] , 1 , conn.conn , data_loaded)
+	test.setValues()
+	test.setSumtickets()
+	test.setPercentageResolutions()
+	test.drawTable()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+	print data_loaded['conversion']
 
 
 
