@@ -15,6 +15,14 @@ from lpod.table import *
 from lpod.frame import *
 from lpod.draw_page import *
 import yaml
+from datetime import date , datetime
+from dateutil.relativedelta import relativedelta
+import pylab
+import matplotlib
+import matplotlib.dates
+
+
+
 #####to move to config file#####
 month_dict = {
 	1 : "Janvier",
@@ -284,7 +292,7 @@ class Category_Synthesis(Category):
 		self.cursor=TaskExecutor(self.queries.queriesBlock  , self.conn)
 		self.cursor.executeTasks()
 		self.cursor.fetchValues()
-		self.anomBloq = self.cursor.fetchedValues
+		self.anomBloqValues = self.cursor.fetchedValues
 
 		self.cursor=TaskExecutor(self.queries.queriesOthers  , self.conn)
 		self.cursor.executeTasks()
@@ -292,11 +300,108 @@ class Category_Synthesis(Category):
 		self.otherValues = self.cursor.fetchedValues
 
 
+	def setSumMonths(self , vectorType):
+		result = [0 , 0 , 0 , 0]
+		for i in range(0 , len(vectorType)):
+			for j in range(0 , len(vectorType[i])):
+				for k in range(0 , len(vectorType[i][j])):
+					result[k] = result[k]+vectorType[i][j][k]
+		return result
+
+	def setVectors(self):
+		self.informationVector = self.setSumMonths(self.informationValues)
+		self.anomMinVector = self.setSumMonths(self.anomMinValues)
+		self.anomMajVector = self.setSumMonths(self.anomMajValues)
+		self.anomBloqVector = self.setSumMonths(self.anomBloqValues)
+		self.otherVector = self.setSumMonths(self.otherValues) 
+		
+		# print self.informationValues
+		# print "informVector"
+		# print self.informationVector
+		# print "anomMinVector"
+		# print self.anomMinVector
+
+	def transformVectors(self):
+		statusVector = [[] , [] , [] , []]
+		
+		for i in range(0 , len(statusVector)):
+			statusVector[i].append(str(self.informationVector[i]))
+			statusVector[i].append(str(self.anomMinVector[i]))
+			statusVector[i].append(str(self.anomMajVector[i]))
+			statusVector[i].append(str(self.anomBloqVector[i]))
+			statusVector[i].append(str(self.otherVector[i]))
+			statusVector[i].append(str(self.informationVector[i]+self.anomMinVector[i]+self.anomMajVector[i]+self.anomBloqVector[i]+self.otherVector[i]))
+			# print np.sum(statusVector)
+		return statusVector	
+
+	def drawTable(self):
+		self.table = ExterneTablesGenerator("Syntheses"  ,["Information" , "Anomalie Mineure" , "Anomalie Majeure" , "Anomalie Bloquante" , "Autre" , "Total"],  ["Encours de trait" , "En attente d'elem" , "Clotures" , "total"] , self.transformVectors() ,"../templates/tmplt.odp" , "tableSynthesis" , self.data_conf)	
+		self.table.recoverTemplate()
+		self.table.createPage()
+		self.table.create_table()
+		
+		self.table.fill_cells()
+		self.table.merge()
+		self.table.savePresentation()
+ 
+
 
 
 class Category_Evolution(Category):
 	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
 		Category.__init__(self , markdownFile , clientId , contractList , period , conn , data_conf)
+
+	def setPage(self):
+		periodReporting = (date.today() +relativedelta(months =-self.period))
+
+		
+		self.markdownFile.new_slide("Reporting - De "+self.data_conf['month_dict'][(periodReporting.month)]+" a "+self.data_conf['month_dict'][(date.today().month)])
+
+
+	def setValues(self):
+		#recover information issues from QueriesInformation
+		#recover Anomaly issues from QueriesDivision
+		flow = InitQueriesFlow(self.clientId , self.contractList , self.period )
+		flow.setQueries()
+
+		anomaly = InitQueriesDivision(self.clientId , self.contractList , self.period)
+		anomaly.setQueries()
+
+
+		cursorFlow = TaskExecutor(flow.listQueries , self.conn)
+		cursorFlow.executeTasks()
+		cursorFlow.fetchValues()
+		self.valuesFlow = cursorFlow.fetchedValues
+
+		cursorAnomaly = TaskExecutor(anomaly.listQueries , self.conn)
+		cursorAnomaly.executeTasks()
+		cursorAnomaly.fetchValues()
+		self.valuesAnomaly = cursorAnomaly.fetchedValues
+
+
+	def setVectors(self):
+
+		#vector containing sum of information issues for each month
+		self.informVector = []
+		for i in range(0 , self.period):
+			self.informVector.append(0)
+			for j in range(0 , len(self.contractList)):
+				self.informVector[i] = self.informVector[i] + self.valuesFlow[i][j][0]
+
+		#vector containing sum of anomalies issues for each month
+		self.anomalyVector = []
+		for i in range(0 , self.period):
+			self.anomalyVector.append(0)
+			for j in range(0 , len(self.contractList)):
+				for k in range(0 , 2):
+					self.anomalyVector[i]=self.anomalyVector[i]+self.valuesAnomaly[i][j][k]
+
+		print (self.informVector)
+		print (self.anomalyVector)
+	
+	def drawDoubleLineChart(self):
+		graphic = LineChartGenerator("title" , "xLabel" , "yLabel" , self.period)
+		graphic.saveLineChart(graphic.createDoubleLineChartDates(self.informVector , self.anomalyVector) , "titleFig")		
 
 
 
@@ -304,10 +409,6 @@ class Category_Demands(Category):
 	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
 		Category.__init__(self , markdownFile , clientId , contractList , period , conn , data_conf)
 
-
-class Category_Evolution(Category):
-	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
-		Category.__init__(self , markdownFile , clientId , contractList , period , conn , data_conf)
 
 class Category_Clos_Open(Category):
 	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
@@ -420,7 +521,7 @@ class InitQueriesSynthesis(InitQueries):
 	def __init__(self , clientId , contractList , period):
 		InitQueries.__init__(self  , clientId , contractList)
 		self.period= int(period)
-		self.static_query = " from statistic_ticket st inner join contract ct on ct.id = st.contract_id where st.close_date is not null and (st.fix_sla_target < st.fix_duration) and (select extract (year from (select age(current_date , ct.creation_date)))) = 0 and (select extract (month from (select age( current_date , ct.creation_date)))) = "
+		self.static_query = " from statistic_ticket st inner join contract ct on ct.id = st.contract_id where (select extract (year from (select age(current_date , ct.creation_date)))) = 0 and (select extract (month from (select age( current_date , ct.creation_date)))) = "
 
 
 	def setInformation_Queries(self):		
@@ -433,7 +534,7 @@ class InitQueriesSynthesis(InitQueries):
 				self.queriesInformation[i][j].append("select count(st.issue_type) "+self.static_query+str(i)+" and st.issue_type like '%information' and st.waiting_for_customer = 't' and st.contract_id = "+str(self.contractList[j])+" ;")
 				self.queriesInformation[i][j].append("select count(st.issue_type) "+self.static_query+str(i)+" and st.issue_type like '%information' and  st.close_date is not null and st.contract_id = "+str(self.contractList[j])+" ;")
 				self.queriesInformation[i][j].append("select count(st.issue_type) "+self.static_query+str(i)+" and st.issue_type like '%information' and (st.fix_in_progress = 't' or st.waiting_for_customer = 't' or st.close_date is not null) and st.contract_id = "+str(self.contractList[j])+" ;")
-		
+					
 
 	def set_Anom_Min_Queries(self):
 		self.queriesAnoMin = []
@@ -479,7 +580,6 @@ class InitQueriesSynthesis(InitQueries):
 				self.queriesOthers[i][j].append(self.static_other_query+str(i)+" and waiting_for_customer = 't' and contract_id = "+str(self.contractList[j])+self.static_condition)
 				self.queriesOthers[i][j].append(self.static_other_query+str(i)+" and close_date is not null and contract_id = "+str(self.contractList[j])+self.static_condition)
 				self.queriesOthers[i][j].append(self.static_other_query+str(i)+" and (fix_in_progress = 't' or waiting_for_customer = 't' or close_date is not null) and contract_id = "+str(self.contractList[j])+self.static_condition)
-
 
 
 
@@ -593,8 +693,12 @@ class ExterneTablesGenerator():
 		self.data_conf = data_conf
 	def recoverTemplate(self):	
 		try:
+			
 			self.doc = odf_get_document(str(self.data_conf['conversion']['template']))
 			self.context = self.doc.get_body()
+			
+			print "longuerue "+ str(len(self.context.get_children()))
+			
 		except:
 			logging.error("can't recover or open the template "+str(self.path))
 
@@ -625,26 +729,82 @@ class ExterneTablesGenerator():
 		self.frame = odf_create_frame(name = u"frame"+str(id) , size=('22cm' , '7.2cm') , position = ('2.3cm' , '4.5cm'))
 		self.frame.append(self.tab)
 		self.page.append(self.frame)
-		self.context.insert(self.page , 1)
-	
+		self.context.insert(self.page  , 1)
+		self.context.insert(self.page  , 0)
+
 	def savePresentation(self):
 		
-		self.doc.save(target=str(self.id)+"report.odp" , pretty="false")
+		self.doc.save(target=str(self.id)+"report.odp" , pretty="true")
 		self.data_conf['conversion']['template']=str(self.id)+"report.odp"
+
+
+
 class LineChartGenerator():
-	def __init__(self , title ,xLabel , yLabel, values):
+	def __init__(self , title ,xLabel , yLabel , period):
 		self.title = title
 		self.xLabel = xLabel
 		self.yLabel = yLabel
-		self.values = values
+		
+		self.period = period
 
 	def createLineChart(self):
 		plt.plot(self.values[0] , self.values[1])
 		plt.title(self.title)
 		plt.xlabel(self.xLabel)
 		plt.ylabel(self.yLabel)
-	def saveLineChart(self):
-		plt.savefig(title+".svg")
+
+
+	def createLineChartDates(self , values):
+		self.values = values
+		dates = []
+		for i in range(-self.period , 0):
+			dates.append(date.today() +relativedelta(months =+i))
+		print dates
+		print len(self.values)
+		print len(dates)
+
+		fig = pylab.figure()
+		ax = fig.gca()
+		ax.plot_date(dates , self.values , 'b.-')
+
+		ax.xaxis.set_major_locator(
+	    matplotlib.dates.MonthLocator(bymonth=(1 , 2 , 3 , 4 , 5 , 6 , 7 ,8,9 , 10 , 11,12))
+		)
+		ax.xaxis.set_major_formatter(
+    	matplotlib.dates.DateFormatter('%d-%b')
+		)
+		
+		return fig
+
+	def createDoubleLineChartDates(self ,values, values2):
+		print "period is"+str(self.period)
+		self.values2 = values2
+		self.values = values
+		dates = []
+		for i in range(-self.period , 0):
+			dates.append(date.today() +relativedelta(months =+i))
+		print dates
+		print len(self.values)
+		print len(dates)
+
+		fig = pylab.figure()
+		ax = fig.gca()
+		ax.plot_date(dates , self.values , 'r.-')
+		ax.plot_date(dates , self.values2 , 'g.-')
+
+		ax.xaxis.set_major_locator(
+	    matplotlib.dates.MonthLocator(bymonth=(1 , 2 , 3 , 4 , 5 , 6 , 7 ,8,9 , 10 , 11,12))
+		)
+		ax.xaxis.set_major_formatter(
+    	matplotlib.dates.DateFormatter('%d-%b')
+		)
+		
+		return fig
+
+	def saveLineChart(self , fig , title):
+		fig.savefig(title+".svg")
+		fig.show()
+		
 
 class markdownGenerator():
 	def __init__(self , file):
@@ -721,19 +881,19 @@ if __name__ == "__main__":
 
 	file = markdownGenerator("filetest")
 	
-	for arg in sys.argv:
-		print arg 
+	# for arg in sys.argv:
+	# 	print arg 
 
-	# test = Category_Flow(file , "1836" , ["12485"  , "12491"] , 1 , conn.conn)
-	# test.initValues()
+	# # test = Category_Flow(file , "1836" , ["12485"  , "12491"] , 1 , conn.conn)
+	# # test.initValues()
 
-	# test.setValues()
-	# print test.values
-	# # testArray = [  [[1 , 1 , 1],[2 , 2 , 2],[3 , 3 , 3]] ,[[4 , 4 , 4],[5 , 5 , 5],[6 , 6 , 6]],[[7 , 7 , 7],[8 , 8 , 8],[9 , 9, 9]],[[10 , 10 , 10],[11 , 11 , 11],[12 , 12 , 12]] ]
-	# # print test.totalValues
-	# print test.recoverMonths()
-	# test.drawTable()
-	# # print test.queries.listQueries[0][0][3]
+	# # test.setValues()
+	# # print test.values
+	# # # testArray = [  [[1 , 1 , 1],[2 , 2 , 2],[3 , 3 , 3]] ,[[4 , 4 , 4],[5 , 5 , 5],[6 , 6 , 6]],[[7 , 7 , 7],[8 , 8 , 8],[9 , 9, 9]],[[10 , 10 , 10],[11 , 11 , 11],[12 , 12 , 12]] ]
+	# # # print test.totalValues
+	# # print test.recoverMonths()
+	# # test.drawTable()
+	# # # print test.queries.listQueries[0][0][3]
 
 
 
@@ -745,31 +905,61 @@ if __name__ == "__main__":
 	conn = ConnectionDB(data_loaded['connection'])
 	conn.connection()
 
-	# test = Category_Division(file , "1836" , ["12485"  , "12491"] , 1 , conn.conn , data_loaded)
+	# # test = Category_Division(file , "1836" , ["12485"  , "12491"] , 1 , conn.conn , data_loaded)
+	# # test.initValues()
+	# # test.setValues()
+	# # test.drawTable()
+
+	# # print data_loaded['conversion']
+
+
+	# data_loaded['conversion']['template'] = 'testing2.odp'
+	# test = Category_Client(file , "1836" , ["12485" , "2104" , "77666" , "12491"] , 3 , conn.conn , data_loaded)
 	# test.initValues()
+	# test.fillSlide()
+	# convert = Converter(file , "../templates/tmplt.odp" , "testing3" , data_loaded)
+	# convert.convert()	
+
+	# # print data_loaded['conversion']
+	# # convert = Converter(file , "../templates/tmplt.odp" , "testing2" , data_loaded)
+	# # convert.convert()
+	# # print data_loaded['conversion']
+
+	# # test = Category_Resolution(file , "1836" , ["12485"  , "12491"] , 1 , conn.conn , data_loaded)
+	# # test.setValues()
+	# # test.setSumtickets()
+	# # test.setPercentageResolutions()
+	# # test.drawTable()
+
+	# print data_loaded['conversion']
+
+
+
+	# test = Category_Synthesis(file , "1836" , ["12485" ] , 1 , conn.conn , data_loaded)
+	
 	# test.setValues()
+	# test.setVectors()
+	# test.transformVectors()
 	# test.drawTable()
 
-	print data_loaded['conversion']
-	
-	test = Category_Client(file , "1836" , ["12485" , "2104" , "77666" , "12491"] , 3 , conn.conn , data_loaded)
-	test.initValues()
-	test.fillSlide()
-	convert = Converter(file , "../templates/tmplt.odp" , "testing" , data_loaded)
-	convert.convert()	
 
-	print data_loaded['conversion']
+	# test = LineChartGenerator("title" , "xlabel" , "ylabel" , [[1  , 4 , 8], [1  , 4 , 8]])
+	# test.createLineChart()
+	# test.saveLineChart()
 
 
-	test = Category_Resolution(file , "1836" , ["12485"  , "12491"] , 1 , conn.conn , data_loaded)
-	test.setValues()
-	test.setSumtickets()
-	test.setPercentageResolutions()
-	test.drawTable()
 
-	print data_loaded['conversion']
+	# test = LineChartGenerator("title" , "xlabel" , "ylabe" , [2 , 5 , 0 , 4] , 4)
+	# test.saveLineChart(test.createLineChartDates() , "chekla")
 
 
+	test = Category_Evolution(file , "1836" , ["12485" ] , 5 , conn.conn , data_loaded)
+	# test.setValues()
+	# test.setVectors()
+	# test.drawDoubleLineChart()
+
+
+	test.setPage()
 
 
 
