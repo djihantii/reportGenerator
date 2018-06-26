@@ -124,7 +124,7 @@ class Category_Flow(Category):
 		return listMonths
 
 	def drawTable(self):
-		self.table = ExterneTablesGenerator("tableFlow"  ,["information", "support" , "autre" , "total"],  self.recoverMonths() , self.totalValues ,"tmplt.odp" , "testTable")	
+		self.table = ExterneTablesGenerator("tableFlow"  ,["information", "support" , "autre" , "total"],  self.recoverMonths() , self.totalValues ,self.data_conf['conversion']['template'] , "flow"+self.clientId , self.data_conf)	
 		self.table.recoverTemplate()
 		self.table.createPage()
 		self.table.create_table()
@@ -169,14 +169,15 @@ class Category_Division(Category):
 				self.totalSeverities[j]=self.totalSeverities[j]+self.totalValues[i][j]
 	def recoverMonths(self):
 		listMonths = []
-		for i in range(0 , len(self.values)):
-			for j in range(0 , len(self.values[i])-2):
-				listMonths.append(month_dict[int(self.values[i][j][5])])
+		for i in range(-self.period , 0):	
+			listMonths.append( self.data_conf['month_dict'][(date.today() +relativedelta(months =+i)).month])	
+		
 
 		return listMonths
 
 	def drawTable(self):
-		self.table = ExterneTablesGenerator("table Division"  ,["Mineure", "Majeure" , "Bloquante" , "autre","total"],  self.recoverMonths() , self.totalValues ,"../templates/tmplt.odp" , "testTable" , self.data_conf)	
+		
+		self.table = ExterneTablesGenerator("table Division"  ,["Mineure", "Majeure" , "Bloquante" , "autre","total"],  self.recoverMonths() , self.totalValues ,"../templates/tmplt.odp" , str(self.clientId)+"division" , self.data_conf)	
 		self.table.recoverTemplate()
 		self.table.createPage()
 		self.table.create_table()
@@ -185,13 +186,19 @@ class Category_Division(Category):
 		self.table.fill_cells()
 		self.table.merge()
 		self.table.savePresentation()
-
+	
 	def drawHistogram(self):
-		histogram = HistogramGenerator("Repartition" , self.totalSeverities , ["Mineure" , "Majeure" , "Bloquante " , "Autres"])
-		histogram.setTitles()
-		histogram.create_histogram()
-		histogram.saveFigure()
+		self.histogram = HistogramGenerator(str(self.clientId)+"Repartition" , self.totalSeverities , ["Mineure" , "Majeure" , "Bloquante " , "Autres"])
+		self.histogram.setTitles()
+		self.histogram.create_histogram()
+		self.histogram.saveFigure()
 
+	def insertHistogram(self):
+		periodReporting = (date.today() +relativedelta(months =-self.period))
+		title ="Reporting - De "+self.data_conf['month_dict'][(periodReporting.month)]+" a "+self.data_conf['month_dict'][(date.today().month)] 
+
+		self.markdownFile.img_insert(str(self.clientId)+"Repartition", str(self.clientId)+"Repartition.svg" , title)
+		self.markdownFile.writeText("Repartition des demandes")
 
 
 class Category_Resolution(Category):
@@ -237,7 +244,7 @@ class Category_Resolution(Category):
  			self.valuesTable[1].append(str(self.percentages[i])+"%")
  		
  		
- 		self.table = ExterneTablesGenerator("Resolutions"  ,["Information" , "Anomalie Mineure" , "Anomalie Majeure" , "Anomalie Bloquante"],  ["Nombre de tickets" , "Delai respectes"] , self.valuesTable ,"../templates/tmplt.odp" , "tableResolution" , self.data_conf)	
+ 		self.table = ExterneTablesGenerator("Resolutions"  ,["Information" , "Anomalie Mineure" , "Anomalie Majeure" , "Anomalie Bloquante"],  ["Nombre de tickets" , "Delai respectes"] , self.valuesTable ,"../templates/tmplt.odp" , str(self.clientId)+"resolution" , self.data_conf)	
 		self.table.recoverTemplate()
 		self.table.createPage()
 		self.table.create_table()
@@ -253,13 +260,22 @@ class Category_Resolution(Category):
 		  	anomalieTotalValue[1] = anomalieTotalValue[1]+self.totalNegativeValues[i]  
 		
 
-		pieInformation = PieChartsGenerator("Informations" , ["Delai respecte" , "Delai non respecte"] , [int(self.totalPositiveValues[0]) ,int(self.totalNegativeValues[0]) ])
+		pieInformation = PieChartsGenerator(str(self.clientId)+"Information.svg" , ["Delai respecte" , "Delai non respecte"] , [int(self.totalPositiveValues[0]) ,int(self.totalNegativeValues[0])])
 		pieInformation.createPieCharte()
 		pieInformation.savePieChart()
 
-		pieAnomalie = PieChartsGenerator("Anomalie" , ["Delai respecte" , "Delai non respecte"] , anomalieTotalValue)
+		pieAnomalie = PieChartsGenerator(str(self.clientId)+"Anomalie.svg" , ["Delai respecte" , "Delai non respecte"] , anomalieTotalValue)
 		pieAnomalie.createPieCharte()
 		pieAnomalie.savePieChart()
+
+	def insertPieCharts(self):
+		periodReporting = (date.today() +relativedelta(months =-self.period))
+		title = "Reporting - De "+self.data_conf['month_dict'][(periodReporting.month)]+" a "+self.data_conf['month_dict'][(date.today().month)]
+		self.markdownFile.img_insert(str(self.clientId)+"Information" , str(self.clientId)+"Information.svg" , title)
+		self.markdownFile.writeText("Demande d'information")
+
+		self.markdownFile.img_insert(str(self.clientId)+"Anomalie" , str(self.clientId)+"Anomalie.svg", title)
+		self.markdownFile.writeText("Anomalies")
 
 class Category_Synthesis(Category):
 	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
@@ -335,7 +351,7 @@ class Category_Synthesis(Category):
 		return statusVector	
 
 	def drawTable(self):
-		self.table = ExterneTablesGenerator("Syntheses"  ,["Information" , "Anomalie Mineure" , "Anomalie Majeure" , "Anomalie Bloquante" , "Autre" , "Total"],  ["Encours de trait" , "En attente d'elem" , "Clotures" , "total"] , self.transformVectors() ,"../templates/tmplt.odp" , "tableSynthesis" , self.data_conf)	
+		self.table = ExterneTablesGenerator("Syntheses"  ,["Information" , "Anomalie Mineure" , "Anomalie Majeure" , "Anomalie Bloquante" , "Autre" , "Total"],  ["Encours de trait" , "En attente d'elem" , "Clotures" , "total"] , self.transformVectors() ,"../templates/tmplt.odp" , "Synthesis" , self.data_conf)	
 		self.table.recoverTemplate()
 		self.table.createPage()
 		self.table.create_table()
@@ -396,14 +412,17 @@ class Category_Evolution(Category):
 				for k in range(0 , 2):
 					self.anomalyVector[i]=self.anomalyVector[i]+self.valuesAnomaly[i][j][k]
 
-		print (self.informVector)
-		print (self.anomalyVector)
 	
 	def drawDoubleLineChart(self):
 		graphic = LineChartGenerator("title" , "xLabel" , "yLabel" , self.period)
-		graphic.saveLineChart(graphic.createDoubleLineChartDates(self.informVector , self.anomalyVector) , "titleFig")		
+		graphic.saveLineChart(graphic.createDoubleLineChartDates(self.informVector , self.anomalyVector) , str(self.clientId)+"Evolution")		
 
 
+	def insertLineChart(self):
+		periodReporting = (date.today() +relativedelta(months =-self.period))
+		title = "Reporting - De "+self.data_conf['month_dict'][(periodReporting.month)]+" a "+self.data_conf['month_dict'][(date.today().month)]
+		self.markdownFile.img_insert(str(self.clientId)+"Evolution" , str(self.clientId)+"Evolution.svg" , title)
+		self.markdownFile.writeText("Evolution des tickets")
 
 class Category_Demands(Category):
 	def __init__(self , markdownFile , clientId , contractList , period , conn , data_conf):
@@ -589,7 +608,6 @@ class TaskExecutor():
 		self.queries = queries
 		self.conn = conn
 		self.resultTable = []
-		self.conn = conn
 
 	def testing(self):
 		self.t = self.conn.cursor()
@@ -641,7 +659,7 @@ class PieChartsGenerator():
 		ax.axis('equal')		
 
 	def savePieChart(self):
-		plt.savefig(str(self.title)+"resolution.svg")
+		plt.savefig(str(self.title))
 
 
 
@@ -661,7 +679,6 @@ class HistogramGenerator():
 		# self.ticket_dict["Majeure"]=self.values[2]
 		# self.ticket_dict["Bloquante"]=self.values[3]
 		# self.ticket_dict["Autre"]=self.values[4]
-		print self.ticket_dict
 
 	def create_histogram(self):
 		figure = plt.figure()
@@ -677,7 +694,7 @@ class HistogramGenerator():
 		ax.xaxis.set_major_formatter(plt.FixedFormatter(names))
 
 	def saveFigure(self):
-		plt.savefig("flow"+str(self.title)+".svg")
+		plt.savefig(str(self.title)+".svg")
 
 
 
@@ -697,7 +714,6 @@ class ExterneTablesGenerator():
 			self.doc = odf_get_document(str(self.data_conf['conversion']['template']))
 			self.context = self.doc.get_body()
 			
-			print "longuerue "+ str(len(self.context.get_children()))
 			
 		except:
 			logging.error("can't recover or open the template "+str(self.path))
@@ -730,7 +746,6 @@ class ExterneTablesGenerator():
 		self.frame.append(self.tab)
 		self.page.append(self.frame)
 		self.context.insert(self.page  , 1)
-		self.context.insert(self.page  , 0)
 
 	def savePresentation(self):
 		
@@ -759,9 +774,7 @@ class LineChartGenerator():
 		dates = []
 		for i in range(-self.period , 0):
 			dates.append(date.today() +relativedelta(months =+i))
-		print dates
-		print len(self.values)
-		print len(dates)
+	
 
 		fig = pylab.figure()
 		ax = fig.gca()
@@ -777,15 +790,12 @@ class LineChartGenerator():
 		return fig
 
 	def createDoubleLineChartDates(self ,values, values2):
-		print "period is"+str(self.period)
 		self.values2 = values2
 		self.values = values
 		dates = []
 		for i in range(-self.period , 0):
 			dates.append(date.today() +relativedelta(months =+i))
-		print dates
-		print len(self.values)
-		print len(dates)
+
 
 		fig = pylab.figure()
 		ax = fig.gca()
@@ -803,14 +813,13 @@ class LineChartGenerator():
 
 	def saveLineChart(self , fig , title):
 		fig.savefig(title+".svg")
-		fig.show()
 		
 
 class markdownGenerator():
 	def __init__(self , file):
 		try:
-			self.file = open(str(file)+".md" , "w")	
 			self.title = str(file)+".md"	
+			self.file = open(self.title , "w")	
 		except:
 			logging.error("Can't open file "+str(file)+".md")
 	
@@ -853,12 +862,29 @@ class Converter():
 		self.title = title
 		self.converter = data_conf['conversion']['converter']
 	def convert(self):
-		self.markdownFile.file.close()
-		# print self.converter+" "+self.markdownFile.title+" "+self.template+" "+self.title+".odp"
 		
-		os.system("odpdown "+self.markdownFile.title+" "+self.data_conf['conversion']['template']+" "+self.title+".odp")
+		self.markdownFile.file.close()
+		
+		command = self.data_conf['conversion']['converter']+" "+self.markdownFile.title+" "+self.data_conf['conversion']['template']+" "+self.title+".odp"
+		result = None
+		result = os.system(command)
+				
+		if(result == 0):
+			logging.info("Conversion done successfully")
+		else:
+			logging.warning('Conversion failed')			
+		
+		
 		self.data_conf['conversion']['template']=str(self.title+".odp")
-	
+
+	def eraseMarkdownContent(self):
+
+		self.markdownFile.file = open(self.markdownFile.title , "w")
+		self.markdownFile.writeText("test writing")
+		self.markdownFile.file.seek(0)
+		self.markdownFile.file.truncate()	
+
+		
 
 
 def testExternal():
@@ -876,97 +902,103 @@ def testTotalSum(contrat , indice):
 		result = result + contrat[i][indice]
 	return result
 
+#Delete all temporary files and images 
+def deleteTemp(listImages , listTransitODP ):
+	for i in range(0 , len(listImages)):
+		os.system("rm "+str(listImages[i]))
+
+	for i in range(0 , len(listTransitODP)):
+		os.system("rm "+str(listTransitODP[i]))
 
 if __name__ == "__main__":
-
-	file = markdownGenerator("filetest")
-	
-	# for arg in sys.argv:
-	# 	print arg 
-
-	# # test = Category_Flow(file , "1836" , ["12485"  , "12491"] , 1 , conn.conn)
-	# # test.initValues()
-
-	# # test.setValues()
-	# # print test.values
-	# # # testArray = [  [[1 , 1 , 1],[2 , 2 , 2],[3 , 3 , 3]] ,[[4 , 4 , 4],[5 , 5 , 5],[6 , 6 , 6]],[[7 , 7 , 7],[8 , 8 , 8],[9 , 9, 9]],[[10 , 10 , 10],[11 , 11 , 11],[12 , 12 , 12]] ]
-	# # # print test.totalValues
-	# # print test.recoverMonths()
-	# # test.drawTable()
-	# # # print test.queries.listQueries[0][0][3]
-
 
 
 	with open("../reportConfig/report.conf" , "rwsubl") as stream:
 		data_loaded = yaml.load(stream)
 		data = yaml.dump(data_loaded)
 
-	logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s' , datefmt='%m-%d %H:%M', filename='reporting.log', filemode='w')
+
+
+	logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s' , datefmt='%m-%d %H:%M', filename='/home/djihane/TEST9/reportLog/reporting.log', filemode='w')
 	conn = ConnectionDB(data_loaded['connection'])
 	conn.connection()
 
-	# # test = Category_Division(file , "1836" , ["12485"  , "12491"] , 1 , conn.conn , data_loaded)
-	# # test.initValues()
-	# # test.setValues()
-	# # test.drawTable()
 
-	# # print data_loaded['conversion']
-
-
-	# data_loaded['conversion']['template'] = 'testing2.odp'
-	# test = Category_Client(file , "1836" , ["12485" , "2104" , "77666" , "12491"] , 3 , conn.conn , data_loaded)
-	# test.initValues()
-	# test.fillSlide()
-	# convert = Converter(file , "../templates/tmplt.odp" , "testing3" , data_loaded)
-	# convert.convert()	
-
-	# # print data_loaded['conversion']
-	# # convert = Converter(file , "../templates/tmplt.odp" , "testing2" , data_loaded)
-	# # convert.convert()
-	# # print data_loaded['conversion']
-
-	# # test = Category_Resolution(file , "1836" , ["12485"  , "12491"] , 1 , conn.conn , data_loaded)
-	# # test.setValues()
-	# # test.setSumtickets()
-	# # test.setPercentageResolutions()
-	# # test.drawTable()
-
-	# print data_loaded['conversion']
+	#***************************************Full Test******************************************
+	#***************************************Full Test******************************************
+	#***************************************Full Test******************************************
+	#***************************************Full Test******************************************
 
 
+	# Category client + contract
+	file = markdownGenerator("filetest")
+	client = Category_Client(file , "1836" , ["12485"  , "12491"] , 5 , conn.conn , data_loaded)
+	client.initValues()
+	client.fillSlide()
 
-	# test = Category_Synthesis(file , "1836" , ["12485" ] , 1 , conn.conn , data_loaded)
+	convert = Converter(file , "../templates/tmplt.odp" , "new" , data_loaded)
+	convert.convert()
+	convert.eraseMarkdownContent()
+
+	#Category flow of tickets and issues + Tableau
+	flow = Category_Flow(file , "1836" , ["12485" , "12491" ] , 12 , conn.conn , data_loaded)
+	flow.initValues()
+	flow.setValues()
+	flow.drawTable()
+	print data_loaded['conversion']['template']
+
+
+	# # #Category Division of issue types + table + histogram
+	division = Category_Division(file , "1836" , ["12485" , "12491" ] , 12 , conn.conn , data_loaded)
+	division.initValues()
+	division.setValues()
+	division.drawTable()
+	print data_loaded['conversion']['template']
 	
-	# test.setValues()
-	# test.setVectors()
-	# test.transformVectors()
-	# test.drawTable()
+	division.drawHistogram()
+	division.insertHistogram()
+	
+	convert = Converter(file , "../templates/tmplt.odp" , "newest" , data_loaded)
+	convert.convert()
+	convert.eraseMarkdownContent()
+	print data_loaded['conversion']['template']
 
 
-	# test = LineChartGenerator("title" , "xlabel" , "ylabel" , [[1  , 4 , 8], [1  , 4 , 8]])
-	# test.createLineChart()
-	# test.saveLineChart()
+	# #Category Resolution time + table + Pie charts
+	resolution = Category_Resolution(file , "1836" , ["12485" , "12491" ] , 12 , conn.conn , data_loaded)
+	resolution.setValues()
+	resolution.setSumtickets()
+	resolution.setPercentageResolutions()
+	resolution.drawTable()
+	print data_loaded['conversion']['template']
+	resolution.drawPieCharts()	
+	resolution.insertPieCharts()
 
+	convert = Converter(file , "../templates/tmplt.odp" , "newestPie" , data_loaded)
+	convert.convert()
+	convert.eraseMarkdownContent()
+	print data_loaded['conversion']['template']
 
+	synthesis = Category_Synthesis(file , "1836" , ["12485" , "12491" ] , 12 , conn.conn , data_loaded)
+	synthesis.setValues()
+	synthesis.setVectors()
+	synthesis.transformVectors()
+	synthesis.drawTable()
+	print data_loaded['conversion']['template']
+	
+	evolution = Category_Evolution(file , "1836" , ["12485" , "12491" ] , 12 , conn.conn , data_loaded)
+	
+	evolution.setValues()
+	evolution.setVectors()
+	evolution.drawDoubleLineChart()
+	evolution.insertLineChart()
 
-	# test = LineChartGenerator("title" , "xlabel" , "ylabe" , [2 , 5 , 0 , 4] , 4)
-	# test.saveLineChart(test.createLineChartDates() , "chekla")
-
-
-	test = Category_Evolution(file , "1836" , ["12485" ] , 5 , conn.conn , data_loaded)
-	# test.setValues()
-	# test.setVectors()
-	# test.drawDoubleLineChart()
-
-
-	test.setPage()
-
-
-
-
-
-
-
+	
+	convert = Converter(file , "../templates/tmplt.odp" , "newestLine" , data_loaded)
+	convert.convert()
+	convert.eraseMarkdownContent()
+	print data_loaded['conversion']['template']
+	
 
 
 
